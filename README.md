@@ -7,10 +7,11 @@ The code is written in Python 3.7 and has been tested on Ubuntu 18.04. If you en
 This project uses Conda, thus it should be installed before proceeding with the installation.
 
 1. Creating a new environment
+    
     You can either use your existing environment which has Python version 3.7, or create a new one by running
     
     ```bash
-    conda create -n cr37 python=3.7
+   conda create -n cr37 python=3.7
    ```
    
    Here the environment is named `cr37`. If your Conda environment has a name different from `cr37`, it should be replaced in the following commands.
