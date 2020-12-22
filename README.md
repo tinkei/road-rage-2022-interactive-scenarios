@@ -1,7 +1,7 @@
 # CommonRoad Interactive Scenarios
 This package provides the functionality of simulating  interactive scenarios by coupling CommonRoad with [SUMO](https://sumo.dlr.de/docs/index.html) traffic simulator. 
 
-The code is written in Python 3.7 and has been tested on Ubuntu 18.04. If you encounter any issue, please raise it in our [forum](https://commonroad.in.tum.de/forum/c/interactive-scenarios/15).
+The code is written in Python 3.7 and has been tested on Ubuntu 18.04. If you encounter any issue, please raise it in our [forum](https://commonroad.in.tum.de/forum/c/sumo-interface/10).
 
 ## Installation
 This project uses Conda, thus it should be installed before proceeding with the installation.
