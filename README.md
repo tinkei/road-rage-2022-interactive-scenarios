@@ -1,17 +1,16 @@
 # CommonRoad Interactive Scenarios
 This package provides the functionality of simulating  interactive scenarios by coupling CommonRoad with [SUMO](https://sumo.dlr.de/docs/index.html) traffic simulator. 
 
-The code is written in Python 3.7 and has been tested on Ubuntu 18.04. If you encounter any issue, please raise it in our [forum](https://commonroad.in.tum.de/forum/c/sumo-interface/10).
+The code is written in Python 3.7 and has been tested on Ubuntu 18.04. If you encounter any issue, please raise it in our [forum](https://commonroad.in.tum.de/forum/c/interactive-scenarios/15).
 
 ## Installation
 This project uses Conda, thus it should be installed before proceeding with the installation.
 
 1. Creating a new environment
-    
     You can either use your existing environment which has Python version 3.7, or create a new one by running
     
     ```bash
-   conda create -n cr37 python=3.7
+    conda create -n cr37 python=3.7
    ```
    
    Here the environment is named `cr37`. If your Conda environment has a name different from `cr37`, it should be replaced in the following commands.
@@ -36,10 +35,21 @@ This project uses Conda, thus it should be installed before proceeding with the 
    bash install.sh -e cr37 --sumo
    ```
    It will create a folder `install/`, pull all the dependencies and install them there.
+   
+   
 
 4. Updating the environment variables
 
     If you have just installed SUMO, the `SUMO_PATH` environment variable has been written into the `~/.profile` file. To reach this variable from an IDE (e.g., PyCharm), you must **reboot your system**.
+    
+    *Alternatively*, you can choose to use the dockerized sumo installation instead of installing SUMO by the command```bash install.sh -e cr37``` . To use dockerized sumo simulation, you have to install [Docker](https://docs.docker.com/engine/install/ubuntu/) and follow the [postinstall instructions](https://docs.docker.com/engine/install/linux-postinstall/) as well, to ensure that **you can use the Docker without root privileges**.
+   
+   Run the following to check that your docker is successfully installed.
+   ```bash
+   docker run hello-world
+   ```
+   
+   The rest
 
 ## Usage
 

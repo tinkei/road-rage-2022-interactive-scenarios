@@ -3,7 +3,6 @@
 # Based on the implementation in the CommonRoad-RL and Commonroad-drivability-checker repository
 
 # Constants
-INSTALL_SUMO_MANAGER="FALSE"
 INSTALL_SUMO="FALSE"
 
 USAGE="
@@ -11,7 +10,6 @@ $(basename "$0") [options] -- installs the dependencies for the commonroad-inter
 Options:
     -h | --help   show this help text
     -e ANACONDA_ENV | --env ANACONDA_ENV   name of the environment
-    --sumo_manager   install the sumo-manager, default: false
     --sumo           install SUMO, default: false
 "
 # Parse args
@@ -25,12 +23,6 @@ while [[ $# -gt 0 ]]; do
 
   -e | --env)
     ENVIRONMENT="$2"
-    shift # past argument
-    shift # past value
-    ;;
-
-  --sumo_manager)
-    INSTALL_SUMO_MANAGER="TRUE"
     shift # past argument
     shift # past value
     ;;
@@ -94,8 +86,8 @@ function back_to_basedir() {
   safe_cd "${BASEDIR}"
 }
 
-echo "Installing dependencies"
-pip install iso3166
+echo "Install python requirements"
+pip install -r ../requirements.txt
 
 echo "Installing build dependencies"
 require_sudo apt-get install -y git unzip cmake
@@ -103,16 +95,6 @@ require_sudo apt-get install -y git unzip cmake
 
 echo "Installing ffmpeg"
 require_sudo apt-get install -y ffmpeg
-
-
-echo "Installing sumo-interface"
-git clone https://gitlab.lrz.de/tum-cps/commonroad-sumo-interface.git
-# mv commonroad-sumo-interface sumo_interface
-safe_cd commonroad-sumo-interface
-git checkout interactive
-pip install -r requirements.txt
-pwd >> "${CONDA_PREFIX}/lib/python${PYTHON_VERSION}/site-packages/commonroad.pth"
-python setup.py install
 
 cp pathConfig_DEFAULT.py pathConfig.py
 search="SUMO_BINARY = '/home/user/sumo/bin/sumo'"
@@ -129,9 +111,8 @@ back_to_basedir
 if [ "${INSTALL_SUMO}" == "TRUE" ]; then
   echo "Installing SUMO"
   require_sudo apt-get install python3 wget curl g++ libxerces-c-dev libfox-1.6-0 libfox-1.6-dev cmake libsqlite3-dev libgdal-dev libproj-dev libgl2ps-dev
-  git clone --recursive https://github.com/mo-kli/sumo.git
+  git clone --recursive https://github.com/eclipse/sumo.git
   safe_cd sumo
-  git checkout 53edc58fcda9d534f9e95a7b66e127a766ed19d8
   mkdir -p build/cmake-build
   safe_cd build/cmake-build
   cmake ../..
@@ -147,19 +128,8 @@ if [ "${INSTALL_SUMO}" == "TRUE" ]; then
   back_to_basedir
 fi
 
-
-if [ "${INSTALL_SUMO_MANAGER}" == "TRUE" ]; then
-  echo "Installing CommonRoad-sumo-manager"
-  git clone https://gitlab.lrz.de/cps/commonroad-sumo-manager.git
-  safe_cd commonroad-sumo-manager
-  git checkout development
-  pip install -r ./requirements.txt
-  pwd >> "${CONDA_PREFIX}/lib/python${PYTHON_VERSION}/site-packages/commonroad.pth"
-  back_to_basedir
-fi
-
 back_to_basedir
-rm -rf commonroad-sumo-interface
+
 
 
 echo "Done"

@@ -1,6 +1,7 @@
 """
 Default configuration for CommonRoad to SUMO map converter
 """
+from commonroad.scenario.scenario import ScenarioID
 from sumocr.sumo_config.default import DefaultConfig
 
 from .cr_sumo_config_base import CRSumoConfigBase

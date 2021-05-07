@@ -1,5 +1,5 @@
 <?xml version="1.0" ?>
-<CommonRoadSolution benchmark_id="KS2:SM1:USA_US101-26_2_I-1:2020a" date="2021-04-19">
+<CommonRoadSolution benchmark_id="KS2:SM1:USA_US101-26_2_I-1-1:2020a" date="2021-05-07">
   <ksTrajectory planningProblem="33">
     <ksState>
       <x>0.0</x>

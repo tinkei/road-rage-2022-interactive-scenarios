@@ -12,6 +12,8 @@ class CRSumoConfigBase(DefaultConfig):
 
         self.scenario_name = None
 
+        self.country_id = None
+
         # simulation
         self.dt = None  # length of simulation step of the interface
         self.delta_steps = None  # number of sub-steps simulated in SUMO during every dt

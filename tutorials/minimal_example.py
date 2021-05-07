@@ -22,7 +22,9 @@ from commonroad.scenario.scenario import Tag
 def main():
     # specify required arguments
     name_scenario = "USA_US101-26_2_I-1-1"
-    path_scenario = "../scenarios/NGSIM/US101/" + name_scenario
+    # replace with local folder path (in this case we cloned the whole repository from https://gitlab.lrz.de/tum-cps/commonroad-scenarios/-/tree/2020a_scenarios):
+    folder_scenarios = "/<path_to_cr_scenarios>/commonroad-scenarios/scenarios/interactive/NGSIM/US101/"
+    path_scenario = os.path.join(folder_scenarios, name_scenario)
 
     # for simulation with a given solution trajectory
     name_solution = "KS2:SM1:USA_US101-26_2_T-1:2020a"
@@ -32,7 +34,7 @@ def main():
     solution = CommonRoadSolutionReader.open(path_solutions + name_solution + ".xml")
 
     # path to store output GIFs
-    path_gif = "../outputs/gifs/"
+    path_gifs = "../outputs/gifs/"
 
     # path to store simulated scenarios
     path_scenarios_simulated = "../outputs/simulated/"
@@ -49,7 +51,7 @@ def main():
     if simulation_without_ego:
         # simulation without ego vehicle
         scenario_without_ego, pps = simulate_without_ego(interactive_scenario_path=path_scenario,
-                                                         output_folder_path=path_gif,
+                                                         output_folder_path=path_gifs,
                                                          create_GIF=True)
         # write simulated scenario to file
         fw = CommonRoadFileWriter(scenario_without_ego, pps, author, affiliation, source, tags)
@@ -58,7 +60,7 @@ def main():
     if simulation_with_planner:
         # simulation with plugged-in motion planner
         scenario_with_planner, pps, traj_planner = simulate_with_planner(interactive_scenario_path=path_scenario,
-                                                                         output_folder_path=path_gif,
+                                                                         output_folder_path=path_gifs,
                                                                          create_GIF=True)
         if scenario_with_planner:
             # write simulated scenario to file
@@ -72,7 +74,7 @@ def main():
     if simulation_with_solution:
         # simulation with solution trajectory
         scenario_with_solution, pps, traj_solution = simulate_with_solution(interactive_scenario_path=path_scenario,
-                                                                            output_folder_path=path_gif,
+                                                                            output_folder_path=path_gifs,
                                                                             solution=solution,
                                                                             create_GIF=True)
         if scenario_with_solution:
