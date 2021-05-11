@@ -17,25 +17,23 @@ import warnings
 from collections import defaultdict
 from enum import unique, Enum
 from math import sin, cos
-from typing import Tuple, Dict, Optional
+from typing import Tuple, Dict, Optional, List
 
-import matplotlib as mpl
 import numpy as np
-from commonroad.scenario.obstacle import ObstacleType
+from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.trajectory import Trajectory
 
 from config.sumo_config import SumoConf
+from sumocr.interface.ego_vehicle import EgoVehicle
 from sumocr.interface.sumo_simulation import SumoSimulation
 from sumocr.maps.scenario_wrapper import AbstractScenarioWrapper
-from sumocr.visualization.gif import create_gif
+from sumocr.visualization.video import create_video
 from sumocr.sumo_docker.interface.docker_interface import SumoInterface
 
 from commonroad.scenario.scenario import Scenario
 from commonroad.planning.planning_problem import PlanningProblemSet
 from commonroad.common.solution import Solution
 from commonroad.common.file_reader import CommonRoadFileReader
-
-from simulation.utility import create_trajectory_from_list_states, create_obstacle_from_trajectory
 
 
 @unique
@@ -52,7 +50,7 @@ def simulate_scenario(mode: SimulationOption,
                       num_of_steps: int = None,
                       planning_problem_set: PlanningProblemSet = None,
                       solution: Solution = None,
-                      use_sumo_manager: bool = False):
+                      use_sumo_manager: bool = False) -> Tuple[Scenario, Dict[int, EgoVehicle]]:
     """
     Simulates an interactive scenario with specified mode
 
@@ -64,149 +62,129 @@ def simulate_scenario(mode: SimulationOption,
     :param planning_problem_set: planning problem set of the scenario
     :param solution: solution to the planning problem
     :param use_sumo_manager: indicates whether to use the SUMO Manager
-    :return: simulated scenario
+    :return: simulated scenario and dictionary with items {planning_problem_id: EgoVehicle}
     """
 
     if num_of_steps is None:
         num_of_steps = conf.simulation_steps
 
-    simulated_scenario = None
+    sumo_interface = None
+    if use_sumo_manager:
+        sumo_interface = SumoInterface(use_docker=True)
+        sumo_sim = sumo_interface.start_simulator()
 
-    try:
-        sumo_interface = None
-        if use_sumo_manager:
-            sumo_interface = SumoInterface(use_docker=True)
-            sumo_sim = sumo_interface.start_simulator()
+        sumo_sim.send_sumo_scenario(conf.scenario_name,
+                                    scenario_path)
+    else:
+        sumo_sim = SumoSimulation()
 
-            sumo_sim.send_sumo_scenario(conf.scenario_name,
-                                        scenario_path)
-        else:
-            sumo_sim = SumoSimulation()
+    # initialize simulation
+    sumo_sim.initialize(conf, scenario_wrapper, planning_problem_set)
 
-        if planning_problem_set is not None:
-            sumo_sim.planning_problem_set = planning_problem_set
+    if mode is SimulationOption.WITHOUT_EGO:
+        # simulation without ego vehicle
+        for step in range(num_of_steps):
+            # set to dummy simulation
+            sumo_sim.dummy_ego_simulation = True
+            sumo_sim.simulate_step()
 
-        # initialize simulation
-        sumo_sim.initialize(conf, scenario_wrapper)
+    elif mode is SimulationOption.MOTION_PLANNER:
+        # simulation with plugged in planner
 
-        # dict to store state list of the ego vehicle
-        dict_idx_to_list_state = defaultdict(list)
+        # specify planning duration (1 step = 0.1 seconds)
+        duration_planning = 80
 
-        if mode is SimulationOption.WITHOUT_EGO:
-            # simulation without ego vehicle
+        def run_simulation():
+            ego_vehicles = sumo_sim.ego_vehicles
             for step in range(num_of_steps):
-                # set to dummy simulation
-                sumo_sim.dummy_ego_simulation = True
+                if use_sumo_manager:
+                    ego_vehicles = sumo_sim.ego_vehicles
+                # retrieve the CommonRoad scenario at the current time step
+                commonroad_scenario = sumo_sim.commonroad_scenario_at_time_step(sumo_sim.current_time_step)
+                for idx, ego_vehicle in enumerate(ego_vehicles.values()):
+                    # retrieve the current state of the ego vehicle
+                    state_current_ego = ego_vehicle.current_state
+
+                    if duration_planning <= step:
+                        # return if exceeds specified planning horizon
+                        return
+
+                    # ====== plug in your motion planner here
+                    # example motion planner which decelerates to full stop
+                    next_state = copy.deepcopy(state_current_ego)
+                    next_state.steering_angle = 0.0
+                    a = -5.0
+                    dt = 0.1
+                    if next_state.velocity > 0:
+                        v = next_state.velocity
+                        x, y = next_state.position
+                        o = next_state.orientation
+
+                        next_state.position = np.array([x + v * cos(o) * dt, y + v * sin(o) * dt])
+                        next_state.velocity += a * dt
+                    # ====== end of motion planner
+
+                    # update the ego vehicle with new trajectory with only 1 state for the current step
+                    next_state.time_step = 1
+                    trajectory_ego = [next_state]
+                    ego_vehicle.set_planned_trajectory(trajectory_ego)
+
+                if use_sumo_manager:
+                    # set the modified ego vehicles to synchronize in case of using sumo_docker
+                    sumo_sim.ego_vehicles = ego_vehicles
+
                 sumo_sim.simulate_step()
 
-        elif mode is SimulationOption.MOTION_PLANNER:
-            # simulation with plugged in planner
+        run_simulation()
 
-            # specify planning duration (1 step = 0.1 seconds)
-            duration_planning = 80
+    elif mode is SimulationOption.SOLUTION:
+        # simulation with given solution trajectory
 
-            def run_simulation():
-                ego_vehicles = sumo_sim.ego_vehicles
-                for step in range(num_of_steps):
-                    if use_sumo_manager:
-                        ego_vehicles = sumo_sim.ego_vehicles
-                    # retrieve the CommonRoad scenario at the current time step
-                    commonroad_scenario = sumo_sim.commonroad_scenario_at_time_step(sumo_sim.current_time_step)
-                    for idx, ego_vehicle in enumerate(ego_vehicles.values()):
-                        # retrieve the current state of the ego vehicle
-                        state_current_ego = ego_vehicle.current_state
+        def run_simulation():
+            ego_vehicles = sumo_sim.ego_vehicles
 
-                        # save to list of states for later creation of Trajectory object
-                        dict_idx_to_list_state[idx].append(state_current_ego)
+            for time_step in range(num_of_steps):
+                if use_sumo_manager:
+                    ego_vehicles = sumo_sim.ego_vehicles
+                for idx_ego, ego_vehicle in enumerate(ego_vehicles.values()):
+                    # retrieve the current state of the ego vehicle
+                    state_current_ego = ego_vehicle.current_state
 
-                        if duration_planning <= step:
-                            # return if exceeds specified planning horizon
+                    # update the ego vehicles with solution trajectories
+                    try:
+                        trajectory_solution = solution.planning_problem_solutions[idx_ego].trajectory
+                        if len(trajectory_solution.state_list) <= time_step:
                             return
+                        next_state = copy.deepcopy(trajectory_solution.state_list[time_step])
 
+                    except IndexError:
                         next_state = copy.deepcopy(state_current_ego)
-                        # ====== plug in your motion planner here
-                        # example motion planner which decelerates to full stop
-                        a = -5.0
-                        dt = 0.1
-                        if next_state.velocity > 0:
-                            v = next_state.velocity
-                            x, y = next_state.position
-                            o = next_state.orientation
 
-                            next_state.position = np.array([x + v * cos(o) * dt, y + v * sin(o) * dt])
-                            next_state.velocity += a * dt
-                        # ====== end of motion planner
+                    next_state.time_step = 1
+                    trajectory_ego = [next_state]
+                    ego_vehicle.set_planned_trajectory(trajectory_ego)
 
-                        # update the ego vehicle with new trajectory with only 1 state for the current step
-                        next_state.time_step = 1
-                        trajectory_ego = [next_state]
-                        ego_vehicle.set_planned_trajectory(trajectory_ego)
+                if use_sumo_manager:
+                    # set the modified ego vehicles to synchronize in case of using SUMO Manager
+                    sumo_sim.ego_vehicles = ego_vehicles
 
-                    if use_sumo_manager:
-                        # set the modified ego vehicles to synchronize in case of using SUMO Manager
-                        sumo_sim.ego_vehicles = ego_vehicles
+                sumo_sim.simulate_step()
 
-                    sumo_sim.simulate_step()
+        run_simulation()
 
-            run_simulation()
+    # retrieve the simulated scenario in CR format
+    simulated_scenario = sumo_sim.commonroad_scenarios_all_time_steps()
 
-        elif mode is SimulationOption.SOLUTION:
-            # simulation with given solution trajectory
+    # stop the simulation
+    sumo_sim.stop()
+    if use_sumo_manager:
+        sumo_interface.stop_simulator()
 
-            def run_simulation():
-                ego_vehicles = sumo_sim.ego_vehicles
+    ego_vechicles = {}
+    if mode is not SimulationOption.WITHOUT_EGO:
+        ego_vechicles = {ego_v.pp_id: ego_v for _, ego_v in sumo_sim.ego_vehicles.items()}
 
-                for time_step in range(num_of_steps):
-                    if use_sumo_manager:
-                        ego_vehicles = sumo_sim.ego_vehicles
-                    for idx_ego, ego_vehicle in enumerate(ego_vehicles.values()):
-                        # retrieve the current state of the ego vehicle
-                        state_current_ego = ego_vehicle.current_state
-
-                        # save to list of states for later creation of Trajectory object
-                        dict_idx_to_list_state[idx_ego].append(state_current_ego)
-
-                        # update the ego vehicles with solution trajectories
-                        try:
-                            trajectory_solution = solution.planning_problem_solutions[idx_ego].trajectory
-                            if len(trajectory_solution.state_list) <= time_step:
-                                return
-                            next_state = copy.deepcopy(trajectory_solution.state_list[time_step])
-
-                        except IndexError:
-                            next_state = copy.deepcopy(state_current_ego)
-
-                        next_state.time_step = 1
-                        trajectory_ego = [next_state]
-                        ego_vehicle.set_planned_trajectory(trajectory_ego)
-
-                    if use_sumo_manager:
-                        # set the modified ego vehicles to synchronize in case of using SUMO Manager
-                        sumo_sim.ego_vehicles = ego_vehicles
-
-                    sumo_sim.simulate_step()
-
-            run_simulation()
-
-        # retrieve the simulated scenario in CR format
-        simulated_scenario = sumo_sim.commonroad_scenarios_all_time_steps()
-
-        # stop the simulation
-        sumo_sim.stop()
-        if use_sumo_manager:
-            sumo_interface.stop_simulator()
-
-        dict_idx_to_trajectory = {}
-
-        if mode is not SimulationOption.WITHOUT_EGO:
-            for idx, list_states in dict_idx_to_list_state.items():
-                trajectory = create_trajectory_from_list_states(list_states)
-                dict_idx_to_trajectory[idx] = trajectory
-
-        return simulated_scenario, dict_idx_to_trajectory
-
-    except Exception as e:
-        warnings.warn(f"Unsuccessful simulation, trying again: {e}")
+    return simulated_scenario, ego_vechicles
 
     if simulated_scenario is None:
         raise RuntimeError("Unexpected errors occurred during the simulation.")
@@ -245,7 +223,7 @@ def simulate_without_ego(interactive_scenario_path: str,
 
     if create_GIF:
         create_gif_for_simulation(simulated_scenario_without_ego, output_folder_path, planning_problem_set,
-                                  None, SimulationOption.WITHOUT_EGO.value)
+                                  {}, SimulationOption.WITHOUT_EGO.value)
 
     return simulated_scenario_without_ego, planning_problem_set
 
@@ -255,7 +233,7 @@ def simulate_with_solution(interactive_scenario_path: str,
                            solution: Solution = None,
                            create_GIF: bool = False,
                            use_sumo_manager: bool = False,
-                           create_ego_obstacle: bool = False) -> Tuple[Scenario, PlanningProblemSet, Trajectory]:
+                           create_ego_obstacle: bool = False) -> Tuple[Scenario, PlanningProblemSet, Dict[int, EgoVehicle]]:
     """
     Simulates an interactive scenario with a given solution
 
@@ -278,7 +256,7 @@ def simulate_with_solution(interactive_scenario_path: str,
     scenario_wrapper.sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
     scenario_wrapper.lanelet_network = scenario.lanelet_network
 
-    scenario_with_solution, dict_idx_to_trajectory = simulate_scenario(SimulationOption.SOLUTION, conf,
+    scenario_with_solution, ego_vehicles = simulate_scenario(SimulationOption.SOLUTION, conf,
                                                                        scenario_wrapper,
                                                                        interactive_scenario_path,
                                                                        num_of_steps=conf.simulation_steps,
@@ -289,22 +267,22 @@ def simulate_with_solution(interactive_scenario_path: str,
 
     if create_GIF:
         create_gif_for_simulation(scenario_with_solution, output_folder_path, planning_problem_set,
-                                  dict_idx_to_trajectory, SimulationOption.SOLUTION.value)
+                                  ego_vehicles, SimulationOption.SOLUTION.value)
 
     if create_ego_obstacle:
-        for idx, planning_problem in enumerate(planning_problem_set.planning_problem_dict.values()):
-            trajectory = dict_idx_to_trajectory[idx]
-            obstacle_ego = create_obstacle_from_trajectory(trajectory, scenario_with_solution.generate_object_id())
+        for pp_id, planning_problem in planning_problem_set.planning_problem_dict.items():
+            obstacle_ego = ego_vehicles[pp_id].get_dynamic_obstacle()
             scenario_with_solution.add_objects(obstacle_ego)
 
-    return scenario_with_solution, planning_problem_set, list(dict_idx_to_trajectory.values())[0]
+    return scenario_with_solution, planning_problem_set, ego_vehicles
 
 
 def simulate_with_planner(interactive_scenario_path: str,
                           output_folder_path: str = None,
                           create_GIF: bool = False,
                           use_sumo_manager: bool = False,
-                          create_ego_obstacle: bool = False) -> Tuple[Scenario, PlanningProblemSet, Trajectory]:
+                          create_ego_obstacle: bool = False) \
+        -> Tuple[Scenario, PlanningProblemSet, Dict[int, EgoVehicle]]:
     """
     Simulates an interactive scenario with a plugged in motion planner
 
@@ -313,7 +291,7 @@ def simulate_with_planner(interactive_scenario_path: str,
     :param create_GIF: indicates whether to create a GIF of the simulated scenario
     :param use_sumo_manager: indicates whether to use the SUMO Manager
     :param create_ego_obstacle: indicates whether to create obstacles from the planned trajectories as the ego vehicles
-    :return: Tuple of the simulated scenario and the planning problem set
+    :return: Tuple of the simulated scenario, planning problem set, and list of ego vehicles
     """
     conf = load_sumo_configuration(interactive_scenario_path)
     scenario_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.cr.xml")
@@ -323,7 +301,7 @@ def simulate_with_planner(interactive_scenario_path: str,
     scenario_wrapper.sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
     scenario_wrapper.lanelet_network = scenario.lanelet_network
 
-    scenario_with_planner, dict_idx_to_trajectory = simulate_scenario(SimulationOption.MOTION_PLANNER, conf,
+    scenario_with_planner, ego_vehicles = simulate_scenario(SimulationOption.MOTION_PLANNER, conf,
                                                                       scenario_wrapper,
                                                                       interactive_scenario_path,
                                                                       num_of_steps=conf.simulation_steps,
@@ -333,15 +311,14 @@ def simulate_with_planner(interactive_scenario_path: str,
 
     if create_GIF:
         create_gif_for_simulation(scenario_with_planner, output_folder_path, planning_problem_set,
-                                  dict_idx_to_trajectory, SimulationOption.MOTION_PLANNER.value)
+                                  ego_vehicles, SimulationOption.MOTION_PLANNER.value)
 
     if create_ego_obstacle:
-        for idx, planning_problem in enumerate(planning_problem_set.planning_problem_dict.values()):
-            trajectory = dict_idx_to_trajectory[idx]
-            obstacle_ego = create_obstacle_from_trajectory(trajectory, scenario_with_planner.generate_object_id())
+        for pp_id, planning_problem in planning_problem_set.planning_problem_dict.items():
+            obstacle_ego = ego_vehicles[pp_id].get_dynamic_obstacle()
             scenario_with_planner.add_objects(obstacle_ego)
 
-    return scenario_with_planner, planning_problem_set, list(dict_idx_to_trajectory.values())[0]
+    return scenario_with_planner, planning_problem_set, ego_vehicles
 
 
 def load_sumo_configuration(interactive_scenario_path: str) -> SumoConf:
@@ -353,7 +330,7 @@ def load_sumo_configuration(interactive_scenario_path: str) -> SumoConf:
 
 def create_gif_for_simulation(scenario_with_planner: Scenario, output_folder_path: str,
                               planning_problem_set: PlanningProblemSet,
-                              dict_idx_to_trajectory: Optional[Dict[int, Trajectory]],
+                              ego_vehicles: Optional[Dict[int, EgoVehicle]],
                               suffix: str, follow_ego: bool = True):
     """Creates the GIF animation for the simulation result."""
     if not output_folder_path:
@@ -362,18 +339,11 @@ def create_gif_for_simulation(scenario_with_planner: Scenario, output_folder_pat
 
     # create list of planning problems and trajectories
     list_planning_problems = []
-    list_trajectories = []
-    for idx, planning_problem in enumerate(planning_problem_set.planning_problem_dict.values()):
-        list_planning_problems.append(planning_problem)
-
-        if dict_idx_to_trajectory:
-            trajectory = dict_idx_to_trajectory[idx]
-            list_trajectories.append(trajectory)
 
     # create GIF animation
-    create_gif(scenario_with_planner,
-               output_folder_path,
-               planning_problems=list_planning_problems,
-               trajectories=list_trajectories,
-               follow_ego=follow_ego,
-               suffix=suffix)
+    create_video(scenario_with_planner,
+                 output_folder_path,
+                 planning_problem_set=planning_problem_set,
+                 trajectory_pred=ego_vehicles,
+                 follow_ego=follow_ego,
+                 suffix=suffix)

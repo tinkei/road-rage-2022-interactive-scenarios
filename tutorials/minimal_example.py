@@ -9,13 +9,15 @@ __maintainer__ = "Edmond Irani Liu"
 __email__ = "edmond.irani@tum.de"
 __status__ = "Integration"
 
+import os
+
 import matplotlib as mpl
 
 mpl.use('TkAgg')
 from simulation.simulations import simulate_without_ego, simulate_with_solution, simulate_with_planner
 from simulation.utility import save_solution
 from commonroad.common.file_writer import CommonRoadFileWriter, OverwriteExistingFile
-from commonroad.common.solution import CommonRoadSolutionReader
+from commonroad.common.solution import CommonRoadSolutionReader, VehicleType, VehicleModel, CostFunction
 from commonroad.scenario.scenario import Tag
 
 
@@ -28,7 +30,6 @@ def main():
 
     # for simulation with a given solution trajectory
     name_solution = "KS2:SM1:USA_US101-26_2_T-1:2020a"
-    # name_solution = "solution_KS2:SM1:USA_US101-26_2_I-1:2020a"
 
     path_solutions = "../outputs/solutions/"
     solution = CommonRoadSolutionReader.open(path_solutions + name_solution + ".xml")
@@ -48,6 +49,10 @@ def main():
     simulation_with_planner = True
     simulation_with_solution = True
 
+    vehicle_type = VehicleType.BMW_320i
+    vehicle_model = VehicleModel.KS
+    cost_function = CostFunction.SM1
+
     if simulation_without_ego:
         # simulation without ego vehicle
         scenario_without_ego, pps = simulate_without_ego(interactive_scenario_path=path_scenario,
@@ -59,7 +64,7 @@ def main():
 
     if simulation_with_planner:
         # simulation with plugged-in motion planner
-        scenario_with_planner, pps, traj_planner = simulate_with_planner(interactive_scenario_path=path_scenario,
+        scenario_with_planner, pps, ego_vehicles = simulate_with_planner(interactive_scenario_path=path_scenario,
                                                                          output_folder_path=path_gifs,
                                                                          create_GIF=True)
         if scenario_with_planner:
@@ -68,7 +73,10 @@ def main():
             fw.write_to_file(f"{path_scenarios_simulated}{name_scenario}_planner.xml", OverwriteExistingFile.ALWAYS)
 
             # saves trajectory to solution file
-            save_solution(scenario_with_planner, list(pps.planning_problem_dict)[0], traj_planner,
+            save_solution(scenario_with_planner, pps, ego_vehicles,
+                          vehicle_type,
+                          vehicle_model,
+                          cost_function,
                           path_solutions, overwrite=True)
 
     if simulation_with_solution:
