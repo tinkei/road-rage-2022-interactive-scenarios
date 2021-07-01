@@ -13,20 +13,15 @@ __status__ = "Integration"
 import copy
 import os
 import pickle
-import warnings
-from collections import defaultdict
 from enum import unique, Enum
 from math import sin, cos
-from typing import Tuple, Dict, Optional, List
+from typing import Tuple, Dict, Optional
 
 import numpy as np
-from commonroad.prediction.prediction import TrajectoryPrediction
-from commonroad.scenario.trajectory import Trajectory
-
-from config.sumo_config import SumoConf
+from sumocr.sumo_config.default import DefaultConfig
 from sumocr.interface.ego_vehicle import EgoVehicle
 from sumocr.interface.sumo_simulation import SumoSimulation
-from sumocr.maps.scenario_wrapper import AbstractScenarioWrapper
+from sumocr.maps.sumo_scenario import ScenarioWrapper
 from sumocr.visualization.video import create_video
 from sumocr.sumo_docker.interface.docker_interface import SumoInterface
 
@@ -44,8 +39,8 @@ class SimulationOption(Enum):
 
 
 def simulate_scenario(mode: SimulationOption,
-                      conf: SumoConf,
-                      scenario_wrapper: AbstractScenarioWrapper,
+                      conf: DefaultConfig,
+                      scenario_wrapper: ScenarioWrapper,
                       scenario_path: str,
                       num_of_steps: int = None,
                       planning_problem_set: PlanningProblemSet = None,
@@ -79,7 +74,7 @@ def simulate_scenario(mode: SimulationOption,
         sumo_sim = SumoSimulation()
 
     # initialize simulation
-    sumo_sim.initialize(conf, scenario_wrapper, planning_problem_set)
+    sumo_sim.initialize(conf, scenario_wrapper, None)
 
     if mode is SimulationOption.WITHOUT_EGO:
         # simulation without ego vehicle
@@ -91,23 +86,17 @@ def simulate_scenario(mode: SimulationOption,
     elif mode is SimulationOption.MOTION_PLANNER:
         # simulation with plugged in planner
 
-        # specify planning duration (1 step = 0.1 seconds)
-        duration_planning = 80
-
         def run_simulation():
             ego_vehicles = sumo_sim.ego_vehicles
             for step in range(num_of_steps):
                 if use_sumo_manager:
                     ego_vehicles = sumo_sim.ego_vehicles
-                # retrieve the CommonRoad scenario at the current time step
-                commonroad_scenario = sumo_sim.commonroad_scenario_at_time_step(sumo_sim.current_time_step)
+
+                # retrieve the CommonRoad scenario at the current time step, e.g. as an input for a predicition module
+                current_scenario = sumo_sim.commonroad_scenario_at_time_step(sumo_sim.current_time_step)
                 for idx, ego_vehicle in enumerate(ego_vehicles.values()):
                     # retrieve the current state of the ego vehicle
                     state_current_ego = ego_vehicle.current_state
-
-                    if duration_planning <= step:
-                        # return if exceeds specified planning horizon
-                        return
 
                     # ====== plug in your motion planner here
                     # example motion planner which decelerates to full stop
@@ -147,18 +136,9 @@ def simulate_scenario(mode: SimulationOption,
                 if use_sumo_manager:
                     ego_vehicles = sumo_sim.ego_vehicles
                 for idx_ego, ego_vehicle in enumerate(ego_vehicles.values()):
-                    # retrieve the current state of the ego vehicle
-                    state_current_ego = ego_vehicle.current_state
-
                     # update the ego vehicles with solution trajectories
-                    try:
-                        trajectory_solution = solution.planning_problem_solutions[idx_ego].trajectory
-                        if len(trajectory_solution.state_list) <= time_step:
-                            return
-                        next_state = copy.deepcopy(trajectory_solution.state_list[time_step])
-
-                    except IndexError:
-                        next_state = copy.deepcopy(state_current_ego)
+                    trajectory_solution = solution.planning_problem_solutions[idx_ego].trajectory
+                    next_state = copy.deepcopy(trajectory_solution.state_list[time_step])
 
                     next_state.time_step = 1
                     trajectory_ego = [next_state]
@@ -170,6 +150,7 @@ def simulate_scenario(mode: SimulationOption,
 
                 sumo_sim.simulate_step()
 
+        check_trajectories(solution, planning_problem_set, conf)
         run_simulation()
 
     # retrieve the simulated scenario in CR format
@@ -180,26 +161,23 @@ def simulate_scenario(mode: SimulationOption,
     if use_sumo_manager:
         sumo_interface.stop_simulator()
 
-    ego_vechicles = {}
-    if mode is not SimulationOption.WITHOUT_EGO:
-        ego_vechicles = {ego_v.pp_id: ego_v for _, ego_v in sumo_sim.ego_vehicles.items()}
+    ego_vechicles = {list(planning_problem_set.planning_problem_dict.keys())[0]:
+                         ego_v for _, ego_v in sumo_sim.ego_vehicles.items()}
 
     return simulated_scenario, ego_vechicles
 
-    if simulated_scenario is None:
-        raise RuntimeError("Unexpected errors occurred during the simulation.")
 
 
 def simulate_without_ego(interactive_scenario_path: str,
                          output_folder_path: str = None,
-                         create_GIF: bool = False,
+                         create_video: bool = False,
                          use_sumo_manager: bool = False) -> Tuple[Scenario, PlanningProblemSet]:
     """
     Simulates an interactive scenario without ego vehicle
 
     :param interactive_scenario_path: path to the interactive scenario folder
     :param output_folder_path: path to the output folder
-    :param create_GIF: indicates whether to create a GIF of the simulated scenario
+    :param create_video: indicates whether to create a mp4 of the simulated scenario
     :param use_sumo_manager: indicates whether to use the SUMO Manager
     :return: Tuple of the simulated scenario and the planning problem set
     """
@@ -207,9 +185,9 @@ def simulate_without_ego(interactive_scenario_path: str,
     scenario_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.cr.xml")
     scenario, planning_problem_set = CommonRoadFileReader(scenario_file).open()
 
-    scenario_wrapper = AbstractScenarioWrapper()
+    scenario_wrapper = ScenarioWrapper()
     scenario_wrapper.sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
-    scenario_wrapper.lanelet_network = scenario.lanelet_network
+    scenario_wrapper.initial_scenario = scenario
 
     # simulation without ego vehicle
     simulated_scenario_without_ego, _ = simulate_scenario(SimulationOption.WITHOUT_EGO, conf,
@@ -221,9 +199,9 @@ def simulate_without_ego(interactive_scenario_path: str,
                                                           use_sumo_manager=use_sumo_manager)
     simulated_scenario_without_ego.scenario_id = scenario.scenario_id
 
-    if create_GIF:
-        create_gif_for_simulation(simulated_scenario_without_ego, output_folder_path, planning_problem_set,
-                                  {}, SimulationOption.WITHOUT_EGO.value)
+    if create_video:
+        create_video_for_simulation(simulated_scenario_without_ego, output_folder_path, planning_problem_set,
+                                    {}, SimulationOption.WITHOUT_EGO.value)
 
     return simulated_scenario_without_ego, planning_problem_set
 
@@ -231,7 +209,7 @@ def simulate_without_ego(interactive_scenario_path: str,
 def simulate_with_solution(interactive_scenario_path: str,
                            output_folder_path: str = None,
                            solution: Solution = None,
-                           create_GIF: bool = False,
+                           create_video: bool = False,
                            use_sumo_manager: bool = False,
                            create_ego_obstacle: bool = False) -> Tuple[Scenario, PlanningProblemSet, Dict[int, EgoVehicle]]:
     """
@@ -240,7 +218,7 @@ def simulate_with_solution(interactive_scenario_path: str,
     :param interactive_scenario_path: path to the interactive scenario folder
     :param output_folder_path: path to the output folder
     :param solution: solution to the planning problem
-    :param create_GIF: indicates whether to create a GIF of the simulated scenario
+    :param create_video: indicates whether to create a mp4 of the simulated scenario
     :param use_sumo_manager: indicates whether to use the SUMO Manager
     :param create_ego_obstacle: indicates whether to create obstacles as the ego vehicles
     :return: Tuple of the simulated scenario and the planning problem set
@@ -252,9 +230,9 @@ def simulate_with_solution(interactive_scenario_path: str,
     scenario_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.cr.xml")
     scenario, planning_problem_set = CommonRoadFileReader(scenario_file).open()
 
-    scenario_wrapper = AbstractScenarioWrapper()
+    scenario_wrapper = ScenarioWrapper()
     scenario_wrapper.sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
-    scenario_wrapper.lanelet_network = scenario.lanelet_network
+    scenario_wrapper.initial_scenario = scenario
 
     scenario_with_solution, ego_vehicles = simulate_scenario(SimulationOption.SOLUTION, conf,
                                                                        scenario_wrapper,
@@ -265,9 +243,9 @@ def simulate_with_solution(interactive_scenario_path: str,
                                                                        use_sumo_manager=use_sumo_manager)
     scenario_with_solution.scenario_id = scenario.scenario_id
 
-    if create_GIF:
-        create_gif_for_simulation(scenario_with_solution, output_folder_path, planning_problem_set,
-                                  ego_vehicles, SimulationOption.SOLUTION.value)
+    if create_video:
+        create_video_for_simulation(scenario_with_solution, output_folder_path, planning_problem_set,
+                                    ego_vehicles, SimulationOption.SOLUTION.value)
 
     if create_ego_obstacle:
         for pp_id, planning_problem in planning_problem_set.planning_problem_dict.items():
@@ -279,7 +257,7 @@ def simulate_with_solution(interactive_scenario_path: str,
 
 def simulate_with_planner(interactive_scenario_path: str,
                           output_folder_path: str = None,
-                          create_GIF: bool = False,
+                          create_video: bool = False,
                           use_sumo_manager: bool = False,
                           create_ego_obstacle: bool = False) \
         -> Tuple[Scenario, PlanningProblemSet, Dict[int, EgoVehicle]]:
@@ -288,7 +266,7 @@ def simulate_with_planner(interactive_scenario_path: str,
 
     :param interactive_scenario_path: path to the interactive scenario folder
     :param output_folder_path: path to the output folder
-    :param create_GIF: indicates whether to create a GIF of the simulated scenario
+    :param create_video: indicates whether to create a mp4 of the simulated scenario
     :param use_sumo_manager: indicates whether to use the SUMO Manager
     :param create_ego_obstacle: indicates whether to create obstacles from the planned trajectories as the ego vehicles
     :return: Tuple of the simulated scenario, planning problem set, and list of ego vehicles
@@ -297,9 +275,9 @@ def simulate_with_planner(interactive_scenario_path: str,
     scenario_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.cr.xml")
     scenario, planning_problem_set = CommonRoadFileReader(scenario_file).open()
 
-    scenario_wrapper = AbstractScenarioWrapper()
+    scenario_wrapper = ScenarioWrapper()
     scenario_wrapper.sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
-    scenario_wrapper.lanelet_network = scenario.lanelet_network
+    scenario_wrapper.initial_scenario = scenario
 
     scenario_with_planner, ego_vehicles = simulate_scenario(SimulationOption.MOTION_PLANNER, conf,
                                                                       scenario_wrapper,
@@ -309,9 +287,9 @@ def simulate_with_planner(interactive_scenario_path: str,
                                                                       use_sumo_manager=use_sumo_manager)
     scenario_with_planner.scenario_id = scenario.scenario_id
 
-    if create_GIF:
-        create_gif_for_simulation(scenario_with_planner, output_folder_path, planning_problem_set,
-                                  ego_vehicles, SimulationOption.MOTION_PLANNER.value)
+    if create_video:
+        create_video_for_simulation(scenario_with_planner, output_folder_path, planning_problem_set,
+                                    ego_vehicles, SimulationOption.MOTION_PLANNER.value)
 
     if create_ego_obstacle:
         for pp_id, planning_problem in planning_problem_set.planning_problem_dict.items():
@@ -321,26 +299,38 @@ def simulate_with_planner(interactive_scenario_path: str,
     return scenario_with_planner, planning_problem_set, ego_vehicles
 
 
-def load_sumo_configuration(interactive_scenario_path: str) -> SumoConf:
+def load_sumo_configuration(interactive_scenario_path: str) -> DefaultConfig:
     with open(os.path.join(interactive_scenario_path, "simulation_config.p"), "rb") as input_file:
         conf = pickle.load(input_file)
 
     return conf
 
 
-def create_gif_for_simulation(scenario_with_planner: Scenario, output_folder_path: str,
-                              planning_problem_set: PlanningProblemSet,
-                              ego_vehicles: Optional[Dict[int, EgoVehicle]],
-                              suffix: str, follow_ego: bool = True):
-    """Creates the GIF animation for the simulation result."""
+def check_trajectories(solution: Solution, pps: PlanningProblemSet, config: DefaultConfig):
+    assert len(set(solution.planning_problem_ids) - set(pps.planning_problem_dict.keys())) == 0, \
+        f"Provided solution trajectories with IDs {solution.planning_problem_ids} don't match " \
+        f"planning problem IDs{list(pps.planning_problem_dict.keys())}"
+
+    for s in solution.planning_problem_solutions:
+        if s.trajectory.final_state.time_step < config.simulation_steps:
+            raise ValueError(f"The simulation requires {config.simulation_steps}"
+                             f"states, but the solution only provides"
+                             f"{s.trajectory.final_state.time_step} time steps!")
+
+
+def create_video_for_simulation(scenario_with_planner: Scenario, output_folder_path: str,
+                                planning_problem_set: PlanningProblemSet,
+                                ego_vehicles: Optional[Dict[int, EgoVehicle]],
+                                suffix: str, follow_ego: bool = True):
+    """Creates the mp4 animation for the simulation result."""
     if not output_folder_path:
-        print("Output folder not specified, skipping GIF generation.")
+        print("Output folder not specified, skipping mp4 generation.")
         return
 
     # create list of planning problems and trajectories
     list_planning_problems = []
 
-    # create GIF animation
+    # create mp4 animation
     create_video(scenario_with_planner,
                  output_folder_path,
                  planning_problem_set=planning_problem_set,

@@ -1,2 +1,2 @@
-commonroad-io>=2021.1
-sumocr==2021.1
+commonroad-io>=2021.2
+sumocr==2021.2

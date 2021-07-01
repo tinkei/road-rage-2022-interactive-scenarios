@@ -18,58 +18,51 @@ from simulation.simulations import simulate_without_ego, simulate_with_solution,
 from simulation.utility import save_solution
 from commonroad.common.file_writer import CommonRoadFileWriter, OverwriteExistingFile
 from commonroad.common.solution import CommonRoadSolutionReader, VehicleType, VehicleModel, CostFunction
-from commonroad.scenario.scenario import Tag
 
 
 def main():
-    # specify required arguments
-    name_scenario = "USA_US101-26_2_I-1-1"
-    # replace with local folder path (in this case we cloned the whole repository from https://gitlab.lrz.de/tum-cps/commonroad-scenarios/-/tree/2020a_scenarios):
-    folder_scenarios = "/<path_to_cr_scenarios>/commonroad-scenarios/scenarios/interactive/NGSIM/US101/"
+
+    folder_scenarios = os.path.join(os.path.dirname(__file__), "interactive_scenarios")
+    name_scenario = "DEU_Frankfurt-34_10_I-1"
     path_scenario = os.path.join(folder_scenarios, name_scenario)
 
-    # for simulation with a given solution trajectory
-    name_solution = "KS2:SM1:USA_US101-26_2_T-1:2020a"
-
-    path_solutions = "../outputs/solutions/"
-    solution = CommonRoadSolutionReader.open(path_solutions + name_solution + ".xml")
-
-    # path to store output GIFs
-    path_gifs = "../outputs/gifs/"
-
-    # path to store simulated scenarios
-    path_scenarios_simulated = "../outputs/simulated/"
-
-    author = 'Max Mustermann'
-    affiliation = 'Technical University of Munich, Germany'
-    source = ''
-    tags = {Tag.URBAN}
-
-    simulation_without_ego = True
-    simulation_with_planner = True
+    simulation_without_ego = False
+    simulation_with_planner = False
     simulation_with_solution = True
 
-    vehicle_type = VehicleType.BMW_320i
+    # for simulation with a given solution trajectory
+    name_solution = "solution_KS1:TR1:DEU_Frankfurt-34_10_I-1:2020a"
+
+    path_solutions = os.path.join(os.path.dirname(__file__), "solutions")
+    solution = CommonRoadSolutionReader.open(os.path.join(path_solutions, name_solution + ".xml"))
+
+    # path to store output GIFs
+    path_videos = "../outputs/videos/"
+
+    # path to store simulated scenarios
+    path_scenarios_simulated = "../outputs/simulated_scenarios/"
+
+    vehicle_type = VehicleType.FORD_ESCORT
     vehicle_model = VehicleModel.KS
-    cost_function = CostFunction.SM1
+    cost_function = CostFunction.TR1
 
     if simulation_without_ego:
         # simulation without ego vehicle
         scenario_without_ego, pps = simulate_without_ego(interactive_scenario_path=path_scenario,
-                                                         output_folder_path=path_gifs,
-                                                         create_GIF=True)
+                                                         output_folder_path=path_videos,
+                                                         create_video=True)
         # write simulated scenario to file
-        fw = CommonRoadFileWriter(scenario_without_ego, pps, author, affiliation, source, tags)
+        fw = CommonRoadFileWriter(scenario_without_ego, pps)
         fw.write_to_file(f"{path_scenarios_simulated}{name_scenario}_no_ego.xml", OverwriteExistingFile.ALWAYS)
 
     if simulation_with_planner:
         # simulation with plugged-in motion planner
         scenario_with_planner, pps, ego_vehicles = simulate_with_planner(interactive_scenario_path=path_scenario,
-                                                                         output_folder_path=path_gifs,
-                                                                         create_GIF=True)
+                                                                         output_folder_path=path_videos,
+                                                                         create_video=True)
         if scenario_with_planner:
             # write simulated scenario to file
-            fw = CommonRoadFileWriter(scenario_with_planner, pps, author, affiliation, source, tags)
+            fw = CommonRoadFileWriter(scenario_with_planner, pps)
             fw.write_to_file(f"{path_scenarios_simulated}{name_scenario}_planner.xml", OverwriteExistingFile.ALWAYS)
 
             # saves trajectory to solution file
@@ -82,12 +75,12 @@ def main():
     if simulation_with_solution:
         # simulation with solution trajectory
         scenario_with_solution, pps, traj_solution = simulate_with_solution(interactive_scenario_path=path_scenario,
-                                                                            output_folder_path=path_gifs,
+                                                                            output_folder_path=path_videos,
                                                                             solution=solution,
-                                                                            create_GIF=True)
+                                                                            create_video=True)
         if scenario_with_solution:
             # write simulated scenario to file
-            fw = CommonRoadFileWriter(scenario_with_solution, pps, author, affiliation, source, tags)
+            fw = CommonRoadFileWriter(scenario_with_solution, pps)
             fw.write_to_file(f"{path_scenarios_simulated}{name_scenario}_solution.xml", OverwriteExistingFile.ALWAYS)
 
 

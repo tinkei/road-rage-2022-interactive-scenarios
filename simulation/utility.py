@@ -1,16 +1,10 @@
-from typing import List, Dict
+from typing import Dict
 
-import matplotlib.pyplot as plt
 from IPython import display
 from commonroad.common.solution import PlanningProblemSolution, Solution, CommonRoadSolutionWriter, VehicleType, \
     VehicleModel, CostFunction
-from commonroad.geometry.shape import Rectangle
 from commonroad.planning.planning_problem import PlanningProblemSet
-from commonroad.prediction.prediction import TrajectoryPrediction
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.scenario import Scenario
-from commonroad.scenario.trajectory import Trajectory, State
-from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.visualization.mp_renderer import MPRenderer
 from sumocr.interface.ego_vehicle import EgoVehicle
 
@@ -27,8 +21,6 @@ def visualize_scenario_with_trajectory(scenario: Scenario,
             num_time_steps = ego_vehicles[0].prediction.final_time_step
         else:
             num_time_steps = 50
-
-    flag_obstacle = False
 
     # visualize scenario
     for i in range(0, num_time_steps):

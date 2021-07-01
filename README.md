@@ -22,7 +22,7 @@ This project uses Conda, thus it should be installed before proceeding with the 
     git config --global credential.helper store
     ```
 
-3. a) Installing the dependencies inclduing SUMO
+3. Installing the dependencies
 
    The following commands install the dependencies of this package, the main dependencies include:
 
@@ -36,26 +36,20 @@ This project uses Conda, thus it should be installed before proceeding with the 
    ```
    It will create a folder `install/`, pull all the dependencies and install them there.
    
-Updating the environment variables
+   
+
+4. Updating the environment variables
 
     If you have just installed SUMO, the `SUMO_PATH` environment variable has been written into the `~/.profile` file. To reach this variable from an IDE (e.g., PyCharm), you must **reboot your system**.
-
-3. b) Alternative: use dockerized SUMO simulator
-
-   Instead of installing sumo, you can choose to use the dockerized sumo installation by the installation command
-   
-   ```bash
-   install.sh -e cr37
-   ```
-   
-   To use dockerized sumo simulation, you have to install [Docker](https://docs.docker.com/engine/install/ubuntu/) and follow the [postinstall instructions](https://docs.docker.com/engine/install/linux-postinstall/) as well, to ensure that **you can use the Docker without root privileges**.
+    
+    *Alternatively*, you can choose to use the dockerized sumo installation instead of installing SUMO by the command```bash install.sh -e cr37``` . To use dockerized sumo simulation, you have to install [Docker](https://docs.docker.com/engine/install/ubuntu/) and follow the [postinstall instructions](https://docs.docker.com/engine/install/linux-postinstall/) as well, to ensure that **you can use the Docker without root privileges**.
    
    Run the following to check that your docker is successfully installed.
    ```bash
    docker run hello-world
    ```
    
-   The rest is handled automatically when setting the option `use_sumo_manager = True` in the simulation functions.
+   The rest
 
 ## Usage
 

@@ -1,14 +1,6 @@
 <?xml version="1.0" ?>
-<CommonRoadSolution benchmark_id="KS2:SM1:USA_US101-26_2_I-1-1:2020a" date="2021-05-07">
+<CommonRoadSolution benchmark_id="KS2:SM1:USA_US101-26_2_I-1-1:2020a" date="2021-05-11">
   <ksTrajectory planningProblem="33">
-    <ksState>
-      <x>0.0</x>
-      <y>0.0</y>
-      <steeringAngle>0.0</steeringAngle>
-      <velocity>12.7284</velocity>
-      <orientation>-0.69407</orientation>
-      <time>0</time>
-    </ksState>
     <ksState>
       <x>0.9783671015412102</x>
       <y>-0.8141986736797423</y>
