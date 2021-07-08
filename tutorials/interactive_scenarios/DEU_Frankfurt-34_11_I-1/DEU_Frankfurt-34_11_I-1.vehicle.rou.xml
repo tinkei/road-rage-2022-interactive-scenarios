@@ -50,13 +50,13 @@
     <vehicle id="15" depart="0.99" departLane="best" departPos="base" departSpeed="max">
         <route edges="1365 1364 1363 1372 1371 1378 1380" />
     </vehicle>
-    <vehicle id="egoVehicle16" depart="1.06" departLane="best" departPos="base" departSpeed="max">
+    <vehicle id="16" depart="1.06" departLane="best" departPos="base" departSpeed="max">
         <route edges="1379 1378 1380" />
     </vehicle>
     <vehicle id="17" depart="1.13" departLane="best" departPos="base" departSpeed="max">
         <route edges="1353 1364 1363 1372 1371 1378 1380" />
     </vehicle>
-    <vehicle id="18" depart="1.19" departLane="best" departPos="base" departSpeed="max">
+    <vehicle id="egoVehicle18" depart="1.19" departLane="best" departPos="base" departSpeed="max">
         <route edges="1379 1378 1380" />
     </vehicle>
     <vehicle id="19" depart="1.26" departLane="best" departPos="base" departSpeed="max">
