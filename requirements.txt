@@ -1,2 +1,2 @@
-commonroad-io>=2021.2
+commonroad-io>=2021.3
 sumocr>=2021.4
