@@ -15,7 +15,7 @@ import os
 import pickle
 from enum import unique, Enum
 from math import sin, cos
-from typing import Tuple, Dict, Optional
+from typing import Tuple, Dict, Optional, Union
 
 import numpy as np
 from sumocr.sumo_config.default import DefaultConfig
@@ -92,7 +92,7 @@ def simulate_scenario(mode: SimulationOption,
                 if use_sumo_manager:
                     ego_vehicles = sumo_sim.ego_vehicles
 
-                # retrieve the CommonRoad scenario at the current time step, e.g. as an input for a predicition module
+                # retrieve the CommonRoad scenario at the current time step, e.g. as an input for a prediction module
                 current_scenario = sumo_sim.commonroad_scenario_at_time_step(sumo_sim.current_time_step)
                 for idx, ego_vehicle in enumerate(ego_vehicles.values()):
                     # retrieve the current state of the ego vehicle
@@ -171,7 +171,8 @@ def simulate_scenario(mode: SimulationOption,
 def simulate_without_ego(interactive_scenario_path: str,
                          output_folder_path: str = None,
                          create_video: bool = False,
-                         use_sumo_manager: bool = False) -> Tuple[Scenario, PlanningProblemSet]:
+                         use_sumo_manager: bool = False,
+                         num_of_steps=None) -> Tuple[Scenario, PlanningProblemSet]:
     """
     Simulates an interactive scenario without ego vehicle
 
@@ -179,6 +180,7 @@ def simulate_without_ego(interactive_scenario_path: str,
     :param output_folder_path: path to the output folder
     :param create_video: indicates whether to create a mp4 of the simulated scenario
     :param use_sumo_manager: indicates whether to use the SUMO Manager
+    :param num_of_steps: max. number of simulated time steps
     :return: Tuple of the simulated scenario and the planning problem set
     """
     conf = load_sumo_configuration(interactive_scenario_path)
@@ -189,11 +191,12 @@ def simulate_without_ego(interactive_scenario_path: str,
     scenario_wrapper.sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
     scenario_wrapper.initial_scenario = scenario
 
+    num_of_steps = conf.simulation_steps if num_of_steps is None else num_of_steps
     # simulation without ego vehicle
     simulated_scenario_without_ego, _ = simulate_scenario(SimulationOption.WITHOUT_EGO, conf,
                                                           scenario_wrapper,
                                                           interactive_scenario_path,
-                                                          num_of_steps=conf.simulation_steps,
+                                                          num_of_steps=num_of_steps,
                                                           planning_problem_set=planning_problem_set,
                                                           solution=None,
                                                           use_sumo_manager=use_sumo_manager)
@@ -231,9 +234,8 @@ def simulate_with_solution(interactive_scenario_path: str,
     scenario, planning_problem_set = CommonRoadFileReader(scenario_file).open()
 
     scenario_wrapper = ScenarioWrapper()
-    scenario_wrapper.sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
-    scenario_wrapper.initial_scenario = scenario
-
+    sumo_cfg_file = os.path.join(interactive_scenario_path, f"{conf.scenario_name}.sumo.cfg")
+    scenario_wrapper.initialize(conf.scenario_name, sumo_cfg_file, scenario_file)
     scenario_with_solution, ego_vehicles = simulate_scenario(SimulationOption.SOLUTION, conf,
                                                                        scenario_wrapper,
                                                                        interactive_scenario_path,
@@ -313,7 +315,7 @@ def check_trajectories(solution: Solution, pps: PlanningProblemSet, config: Defa
 
     for s in solution.planning_problem_solutions:
         if s.trajectory.final_state.time_step < config.simulation_steps:
-            raise ValueError(f"The simulation requires {config.simulation_steps}"
+            raise ValueError(f"The simulation requires {config.simulation_steps} "
                              f"states, but the solution only provides"
                              f"{s.trajectory.final_state.time_step} time steps!")
 
