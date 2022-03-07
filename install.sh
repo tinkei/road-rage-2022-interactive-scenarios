@@ -111,7 +111,7 @@ back_to_basedir
 if [ "${INSTALL_SUMO}" == "TRUE" ]; then
   echo "Installing SUMO"
   require_sudo apt-get install python3 wget curl g++ libxerces-c-dev libfox-1.6-0 libfox-1.6-dev cmake libsqlite3-dev libgdal-dev libproj-dev libgl2ps-dev
-  git clone --recursive https://github.com/eclipse/sumo.git --branch v1_9_2 --depth 1 --single-branch
+  git clone --recursive https://github.com/eclipse/sumo.git --branch v1_12_0 --depth 1 --single-branch
   safe_cd sumo
   mkdir -p build/cmake-build
   safe_cd build/cmake-build
