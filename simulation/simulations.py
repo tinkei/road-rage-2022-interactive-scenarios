@@ -158,13 +158,13 @@ def simulate_scenario(mode: SimulationOption,
 
     # stop the simulation
     sumo_sim.stop()
+    ego_vehicles = {list(planning_problem_set.planning_problem_dict.keys())[0]:
+                         ego_v for _, ego_v in sumo_sim.ego_vehicles.items()}
+
     if use_sumo_manager:
         sumo_interface.stop_simulator()
 
-    ego_vechicles = {list(planning_problem_set.planning_problem_dict.keys())[0]:
-                         ego_v for _, ego_v in sumo_sim.ego_vehicles.items()}
-
-    return simulated_scenario, ego_vechicles
+    return simulated_scenario, ego_vehicles
 
 
 
