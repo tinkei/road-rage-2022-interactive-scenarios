@@ -1,3 +1,4 @@
+import copy
 from typing import Dict
 
 from IPython import display
@@ -5,6 +6,7 @@ from commonroad.common.solution import PlanningProblemSolution, Solution, Common
     VehicleModel, CostFunction
 from commonroad.planning.planning_problem import PlanningProblemSet
 from commonroad.scenario.scenario import Scenario
+from commonroad.scenario.trajectory import Trajectory
 from commonroad.visualization.mp_renderer import MPRenderer
 from sumocr.interface.ego_vehicle import EgoVehicle
 
@@ -33,7 +35,7 @@ def visualize_scenario_with_trajectory(scenario: Scenario,
             rnd.draw_list(ego_vehicles,
                           draw_params={'time_begin': i,
                                        'dynamic_obstacle': {'vehicle_shape': {"occupancy": {"shape": {"rectangle": {
-                                              "facecolor": "green"}}}}}})
+                                           "facecolor": "green"}}}}}})
         rnd.render(show=True)
 
 
@@ -48,11 +50,32 @@ def save_solution(scenario: Scenario, planning_problem_set: PlanningProblemSet, 
     pps = []
     for pp_id, ego_vehicle in ego_vehicles.items():
         assert pp_id in planning_problem_set.planning_problem_dict
+        state_initial = copy.deepcopy(planning_problem_set.planning_problem_dict[pp_id].initial_state)
+        set_attributes_state_initial = set(state_initial.attributes)
+        list_states_trajectory_full = [state_initial]
+
+        # set missing attributes to correctly construct solution file
+        for state in ego_vehicle.driven_trajectory.trajectory.state_list:
+            set_attributes_state = set(state.attributes)
+
+            set_attributes_in_state_extra = set_attributes_state.difference(set_attributes_state_initial)
+            if set_attributes_in_state_extra:
+                for attribute in set_attributes_in_state_extra:
+                    setattr(state_initial, attribute, 0)
+
+            set_attributes_in_state_initial_extra = set_attributes_state_initial.difference(set_attributes_state)
+            if set_attributes_in_state_initial_extra:
+                for attribute in set_attributes_in_state_initial_extra:
+                    setattr(state, attribute, 0)
+
+            list_states_trajectory_full.append(state)
+
+        trajectory_full = Trajectory(initial_time_step=0, state_list=list_states_trajectory_full)
         pps.append(PlanningProblemSolution(planning_problem_id=pp_id,
                                            vehicle_type=vehicle_type,
                                            vehicle_model=vehicle_model,
                                            cost_function=cost_function,
-                                           trajectory=ego_vehicle.driven_trajectory.trajectory))
+                                           trajectory=trajectory_full))
 
     solution = Solution(scenario.scenario_id, pps)
 
